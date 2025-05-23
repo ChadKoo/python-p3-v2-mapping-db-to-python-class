@@ -1,7 +1,9 @@
 from __init__ import CURSOR, CONN
 
 
+
 class Department:
+    all = {} #added when mapping rows to objects(reverse)
 
     def __init__(self, name, location, id=None):
         self.id = id
@@ -45,7 +47,61 @@ class Department:
         CONN.commit()
 
         self.id = CURSOR.lastrowid
+        type(self).all[self.id] = self #added when mapping rows to objects(reverse)
 
+    @classmethod #added when mapping rows to objects(reverse)
+    def instance_from_db(cls, row):
+        """Return a Department object having the attribute values from the table row."""
+
+        # Check the dictionary for an existing instance using the row's primary key
+        department = cls.all.get(row[0])
+        if department:
+            # ensure attributes match row values in case local object was modified
+            department.name = row[1]
+            department.location = row[2]
+        else:
+            # not in dictionary, create new instance and add to dictionary
+            department = cls(row[1], row[2])
+            department.id = row[0]
+            cls.all[department.id] = department
+        return department
+    
+    @classmethod #2 added when mapping rows to objects(reverse)(gets all objects)
+    def get_all(cls):
+        """Return a list containing a Department object per row in the table"""
+        sql = """
+            SELECT *
+            FROM departments
+        """
+
+        rows = CURSOR.execute(sql).fetchall()
+
+        return [cls.instance_from_db(row) for row in rows]
+
+    @classmethod #3 added when mapping rows to objects(reverse)(gets all objects by id)
+    def find_by_id(cls, id):
+        """Return a Department object corresponding to the table row matching the specified primary key"""
+        sql = """
+            SELECT *
+            FROM departments
+            WHERE id = ?
+        """
+
+        row = CURSOR.execute(sql, (id,)).fetchone()
+        return cls.instance_from_db(row) if row else None
+    
+    @classmethod #4 added when mapping rows to objects(reverse)(gets all objects by name)
+    def find_by_name(cls, name):
+        """Return a Department object corresponding to first table row matching specified name"""
+        sql = """
+            SELECT *
+            FROM departments
+            WHERE name is ?
+        """
+
+        row = CURSOR.execute(sql, (name,)).fetchone()
+        return cls.instance_from_db(row) if row else None
+    
     @classmethod
     def create(cls, name, location):
         """ Initialize a new Department instance and save the object to the database """
@@ -64,7 +120,8 @@ class Department:
         CONN.commit()
 
     def delete(self):
-        """Delete the table row corresponding to the current Department instance"""
+        """Delete the table row corresponding to the current Department instance,
+        delete the dictionary entry, and reassign id attribute"""#5 added when mapping rows to objects(reverse)(removes key/value pair from dictionary)
         sql = """
             DELETE FROM departments
             WHERE id = ?
@@ -72,3 +129,9 @@ class Department:
 
         CURSOR.execute(sql, (self.id,))
         CONN.commit()
+
+        # Delete the dictionary entry using id as the key
+        del type(self).all[self.id]
+
+        # Set the id to None
+        self.id = None
